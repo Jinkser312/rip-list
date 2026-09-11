@@ -1,0 +1,13 @@
+{
+  "name": "Rip List",
+  "short_name": "Rip List",
+  "description": "Which movies and shows have I ripped?",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#f5f6f8",
+  "theme_color": "#2563eb",
+  "icons": [
+    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" }
+  ]
+}
