@@ -506,7 +506,11 @@
         const h = hits[0], who = matchedOn(hits, tokens);
         const name = h.t + (h.y ? ` (${h.y})` : "");
         if (h.s === "ripped") { cls = "ok"; mark = "✓"; text = `Yes, you've ripped ${name}.`; }
-        else if (h.s === "removed") { cls = "gone"; mark = "⊘"; text = `${name} was ripped, but its folder was removed from the drive.`; }
+        else if (h.s === "removed") {
+          cls = "gone"; mark = "⊘";
+          text = `${name} was ripped, but its folder was removed from the drive.`
+               + (statusFilter === "removed" ? "" : " Tap Removed to see it.");
+        }
         else if (h.s === "wanted") {
           cls = "want"; mark = "★";
           text = `${name} is on the wishlist${h.g.length ? ` (${h.g.join(", ")})` : ""} — not ripped yet.`;
@@ -519,15 +523,17 @@
         const who = matchedOn(hits, tokens);
         cls = "info"; mark = "≡";
         text = (who ? `${hits.length} titles with ${who}: ` : `${hits.length} matches: `) +
-               `${r} ripped, ${hits.length - r - g - w} to rip` + (w ? `, ${w} wanted` : "") + (g ? `, ${g} removed` : "") + ".";
+               `${r} ripped, ${hits.length - r - g - w} to rip` + (w ? `, ${w} wanted` : "") + (g ? `, ${g} removed` : "") + "."
+             + (g && statusFilter !== "removed" ? " Tap Removed to see those." : "");
       }
       ans.className = "answer " + cls;
       $("answerMark").textContent = mark;
       $("answerText").textContent = text;
     }
 
+    // "All" leaves out titles whose folder is gone - they're still there under the Removed chip.
     let list = everything.filter(it =>
-      (statusFilter === "all" || it.s === statusFilter) &&
+      (statusFilter === "all" ? it.s !== "removed" : it.s === statusFilter) &&
       (kindFilter === "all" || it.k === +kindFilter) &&
       (!tagFilter || (it.g || []).some(t => t.toLowerCase() === tagFilter.toLowerCase())) &&
       (!tokens.length || matches(it, tokens)));
@@ -542,12 +548,14 @@
     $("list").querySelectorAll("li[data-row]").forEach(li =>
       li.addEventListener("click", () => openEdit(view[+li.dataset.row])));
     $("moreBtn").hidden = list.length <= shown;
-    $("count").textContent = list.length === everything.length ? `${everything.length} titles` : `Showing ${list.length} of ${everything.length}`;
 
     const ripped = everything.filter(i => i.s === "ripped").length;
     const removed = everything.filter(i => i.s === "removed").length;
     const wanted = everything.filter(i => i.s === "wanted").length;
-    $("totals").textContent = `${everything.length} titles · ${ripped} ripped · ${everything.length - ripped - removed - wanted} to rip`
+    // Removed titles are out of the picture unless the Removed chip is on, so they're counted apart.
+    const universe = statusFilter === "removed" ? removed : everything.length - removed;
+    $("count").textContent = list.length === universe ? `${universe} titles` : `Showing ${list.length} of ${universe}`;
+    $("totals").textContent = `${everything.length - removed} titles · ${ripped} ripped · ${everything.length - ripped - removed - wanted} to rip`
       + (wanted ? ` · ${wanted} wanted` : "") + (removed ? ` · ${removed} removed` : "");
     $("removedChip").hidden = removed === 0;
     $("wantedChip").hidden = wanted === 0;
