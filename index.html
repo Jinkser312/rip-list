@@ -219,7 +219,11 @@
     <div class="chips">
       <button class="chip" data-addkind="0" aria-pressed="true">Movie</button>
       <button class="chip" data-addkind="1" aria-pressed="false">TV show</button>
+      <span class="sep"></span>
+      <button class="chip" data-addmode="title" aria-pressed="true">By title</button>
+      <button class="chip" data-addmode="person" aria-pressed="false">By actor</button>
     </div>
+    <button class="btn ghost" id="addBack" type="button" hidden style="align-self:flex-start">← back to people</button>
     <input id="addQ" class="field" type="text" enterkeyhint="search" autocomplete="off" autocorrect="off" spellcheck="false"
            placeholder="Type the title…">
     <div class="hint" id="addHint">Search, tap the right one, then pick who wants it.</div>
@@ -242,6 +246,7 @@
       <button class="btn ghost" id="editClose" type="button">Close</button>
     </div>
     <div class="hint" id="editStatus"></div>
+    <div class="hint" id="editAbout" hidden></div>
     <div id="editTagsWrap">
       <div class="hint" style="margin-top:6px">On the wishlists of:</div>
       <div class="chips" id="editTags"></div>
@@ -360,10 +365,26 @@
 
   // t=title y=year s=status k=kind(0/1) i=imdb m=tmdb p=poster a=added d=disk n=notes g=wishlists
   function prep(it) {
-    it.g = it.g || [];
-    it.hay = " " + norm(it.t) + " " + (it.y || "") + " " + (it.i || "").toLowerCase() + " " + norm(it.g.join(" ")) + " ";
+    it.g = it.g || []; it.c = it.c || []; it.gn = it.gn || [];
+    it.titleHay = " " + norm(it.t) + " " + (it.y || "") + " ";
+    it.hay = it.titleHay + (it.i || "").toLowerCase() + " " + norm(it.g.join(" ")) + " "
+           + norm(it.c.join(" ")) + " " + norm(it.dr || "") + " " + norm(it.gn.join(" ")) + " ";
     it.sortT = norm(it.t).replace(/^(the|a|an) /, "");
     return it;
+  }
+
+  // What the typed words actually matched on, for the answer line.
+  function matchedOn(hits, tokens) {
+    const byTitle = hits.some(h => tokens.every(t => h.titleHay.includes(t)));
+    if (byTitle) return "";
+    const person = new Set(), genre = new Set();
+    for (const h of hits) {
+      for (const name of (h.c || []).concat(h.dr ? [h.dr] : [])) if (tokens.every(t => norm(name).includes(t))) person.add(name);
+      for (const g of (h.gn || [])) if (tokens.every(t => norm(g).includes(t))) genre.add(g);
+    }
+    if (person.size) return [...person].slice(0, 2).join(" / ");
+    if (genre.size) return [...genre].slice(0, 2).join(" / ");
+    return "";
   }
 
   const statusWord = { wanted: "Wanted", todo: "To rip", ripped: "✓ Ripped", removed: "Removed" };
@@ -454,19 +475,23 @@
         cls = "no"; mark = "✗"; text = `“${qText}” is not on your list.`;
         if (canAdd()) $("answerAdd").hidden = false;
       } else if (hits.length === 1) {
-        const h = hits[0], name = h.t + (h.y ? ` (${h.y})` : "");
+        const h = hits[0], who = matchedOn(hits, tokens);
+        const name = h.t + (h.y ? ` (${h.y})` : "");
         if (h.s === "ripped") { cls = "ok"; mark = "✓"; text = `Yes, you've ripped ${name}.`; }
         else if (h.s === "removed") { cls = "gone"; mark = "⊘"; text = `${name} was ripped, but its folder was removed from the drive.`; }
         else if (h.s === "wanted") {
           cls = "want"; mark = "★";
           text = `${name} is on the wishlist${h.g.length ? ` (${h.g.join(", ")})` : ""} — not ripped yet.`;
         } else { cls = "todo"; mark = "○"; text = `${name} is on your list but NOT ripped yet.`; }
+        if (who) text += ` With ${who}.`;
       } else {
         const r = hits.filter(h => h.s === "ripped").length;
         const g = hits.filter(h => h.s === "removed").length;
         const w = hits.filter(h => h.s === "wanted").length;
+        const who = matchedOn(hits, tokens);
         cls = "info"; mark = "≡";
-        text = `${hits.length} matches: ${r} ripped, ${hits.length - r - g - w} to rip` + (w ? `, ${w} wanted` : "") + (g ? `, ${g} removed` : "") + ".";
+        text = (who ? `${hits.length} titles with ${who}: ` : `${hits.length} matches: `) +
+               `${r} ripped, ${hits.length - r - g - w} to rip` + (w ? `, ${w} wanted` : "") + (g ? `, ${g} removed` : "") + ".";
       }
       ans.className = "answer " + cls;
       $("answerMark").textContent = mark;
@@ -509,6 +534,7 @@
     if (it.g && it.g.length) bits.push(`<span class="who">${esc(it.g.join(", "))}</span>`);
     bits.push(esc(it.k === 1 ? "TV" : "Movie"));
     if (it.d) bits.push(esc(it.d));
+    if (it.dr || (it.c && it.c.length)) bits.push(esc([it.dr].concat((it.c || []).slice(0, 2)).filter(Boolean).join(", ")));
     if (it.n) bits.push(esc(it.n));
     if (it.pendingEdit) bits.push("change waiting");
     const cls = (it.s === "removed" ? "is-removed " : "") + "tappable";
@@ -520,10 +546,12 @@
 
   // ---------- add ----------
   let addKind = 0, addPicked = null, addTagsChosen = [], addResults = [], addTimer = null;
+  let addMode = "title", addPerson = null, addPeople = [];
 
   function openSheet(prefill) {
     if (!canAdd()) return;
-    addPicked = null; addResults = []; addTagsChosen = [];
+    addPicked = null; addResults = []; addTagsChosen = []; addPerson = null; addPeople = [];
+    $("addBack").hidden = true;
     $("addResults").innerHTML = ""; $("addPickedWrap").hidden = true;
     $("addSubmit").disabled = true; $("addSubmit").textContent = "Add to list";
     $("addHint").textContent = "Search, tap the right one, then pick who wants it.";
@@ -559,6 +587,7 @@
     const q = $("addQ").value.trim();
     if (q.length < 2) { $("addResults").innerHTML = ""; return; }
     if (!cfg.tmdb) { $("addHint").textContent = "No movie lookup key is set on the PC, so titles can't be searched here."; return; }
+    if (addMode === "person" && !addPerson) { searchPeople(q); return; }
     $("addHint").textContent = "Searching…";
     try {
       const { url, init } = tmdbUrl(addKind === 1 ? "search/tv" : "search/movie",
@@ -573,24 +602,87 @@
         poster: r.poster_path || ""
       }));
       $("addHint").textContent = addResults.length ? "Tap the right one." : "No matches. Try a different spelling.";
-      $("addResults").innerHTML = addResults.map((r, i) => {
-        const owned = allItems().find(it => (it.m && it.m === r.tmdbId) || (norm(it.t) === norm(r.title) && (it.y || 0) === (r.year || 0)));
-        const note = owned ? `<div class="meta">Already on the list · ${esc(statusWord[owned.s] || "")}</div>` : "";
-        const poster = r.poster
-          ? `<img class="poster" loading="lazy" alt="" src="https://image.tmdb.org/t/p/w92${esc(r.poster)}" onerror="this.removeAttribute('src')">`
-          : `<span class="poster"></span>`;
-        return `<li data-i="${i}" aria-selected="false">${poster}<div class="info"><div class="title">${esc(r.title)}` +
-               `${r.year ? ` <span class="year">(${r.year})</span>` : ""}</div>${note}</div></li>`;
-      }).join("");
-      $("addResults").querySelectorAll("li").forEach(li => li.addEventListener("click", () => {
-        $("addResults").querySelectorAll("li").forEach(x => x.setAttribute("aria-selected", "false"));
-        li.setAttribute("aria-selected", "true");
-        addPicked = addResults[+li.dataset.i];
-        $("addPickedWrap").hidden = false;
-        $("addSubmit").disabled = false;
-      }));
+      renderFilms(addResults, "No matches. Try a different spelling.");
     } catch (e) {
       $("addHint").textContent = navigator.onLine ? "Search failed: " + e.message : "You're offline — search needs a connection.";
+    }
+  }
+
+  function renderFilms(list, emptyText) {
+    addResults = list;
+    $("addResults").innerHTML = list.map((r, i) => {
+      const owned = allItems().find(it => (it.m && it.m === r.tmdbId) || (norm(it.t) === norm(r.title) && (it.y || 0) === (r.year || 0)));
+      const note = owned ? `<div class="meta">Already on the list · ${esc(statusWord[owned.s] || "")}</div>` : "";
+      const poster = r.poster
+        ? `<img class="poster" loading="lazy" alt="" src="https://image.tmdb.org/t/p/w92${esc(r.poster)}" onerror="this.removeAttribute('src')">`
+        : `<span class="poster"></span>`;
+      return `<li data-i="${i}" aria-selected="false">${poster}<div class="info"><div class="title">${esc(r.title)}` +
+             `${r.year ? ` <span class="year">(${r.year})</span>` : ""}</div>${note}</div></li>`;
+    }).join("");
+    if (!list.length) $("addHint").textContent = emptyText;
+    $("addResults").querySelectorAll("li").forEach(li => li.addEventListener("click", () => {
+      $("addResults").querySelectorAll("li").forEach(x => x.setAttribute("aria-selected", "false"));
+      li.setAttribute("aria-selected", "true");
+      addPicked = addResults[+li.dataset.i];
+      $("addPickedWrap").hidden = false;
+      $("addSubmit").disabled = false;
+    }));
+  }
+
+  async function searchPeople(q) {
+    $("addHint").textContent = "Looking for people…";
+    $("addPickedWrap").hidden = true; $("addSubmit").disabled = true;
+    try {
+      const { url, init } = tmdbUrl("search/person", `&include_adult=false&page=1&query=${encodeURIComponent(q)}`);
+      const res = await fetch(url, init);
+      if (!res.ok) throw new Error("HTTP " + res.status);
+      const data = await res.json();
+      addPeople = (data.results || []).slice(0, 10).map(p => ({
+        id: p.id, name: p.name, profile: p.profile_path || "",
+        job: p.known_for_department === "Directing" ? "Director" : "Actor",
+        known: (p.known_for || []).map(k => k.title || k.name).filter(Boolean).slice(0, 3).join(", ")
+      }));
+      $("addHint").textContent = addPeople.length ? "Tap a name to see their films." : "No people found with that name.";
+      $("addResults").innerHTML = addPeople.map((p, i) => {
+        const pic = p.profile
+          ? `<img class="poster" loading="lazy" alt="" src="https://image.tmdb.org/t/p/w92${esc(p.profile)}" onerror="this.removeAttribute('src')">`
+          : `<span class="poster"></span>`;
+        return `<li data-p="${i}">${pic}<div class="info"><div class="title">${esc(p.name)}</div>` +
+               `<div class="meta">${esc(p.job)}${p.known ? " · " + esc(p.known) : ""}</div></div></li>`;
+      }).join("");
+      $("addResults").querySelectorAll("li[data-p]").forEach(li =>
+        li.addEventListener("click", () => openPerson(addPeople[+li.dataset.p])));
+    } catch (e) {
+      $("addHint").textContent = navigator.onLine ? "Search failed: " + e.message : "You're offline — search needs a connection.";
+    }
+  }
+
+  async function openPerson(person) {
+    addPerson = person;
+    addPicked = null;
+    $("addPickedWrap").hidden = true; $("addSubmit").disabled = true;
+    $("addBack").hidden = false;
+    $("addHint").textContent = `Loading ${person.name}'s ${addKind === 1 ? "shows" : "films"}…`;
+    try {
+      const { url, init } = tmdbUrl(`person/${person.id}/${addKind === 1 ? "tv_credits" : "movie_credits"}`);
+      const res = await fetch(url, init);
+      if (!res.ok) throw new Error("HTTP " + res.status);
+      const data = await res.json();
+      const seen = new Set();
+      const films = (data.cast || []).concat((data.crew || []).filter(c => c.job === "Director"))
+        .map(r => ({
+          tmdbId: r.id,
+          title: addKind === 1 ? r.name : r.title,
+          year: parseInt((addKind === 1 ? r.first_air_date : r.release_date) || "", 10) || null,
+          poster: r.poster_path || "",
+          pop: r.popularity || 0
+        }))
+        .filter(r => r.title && !seen.has(r.tmdbId) && seen.add(r.tmdbId))
+        .sort((a, b) => (b.year || 0) - (a.year || 0) || b.pop - a.pop);
+      $("addHint").textContent = films.length ? `${person.name} — tap one to add.` : "Nothing found for them.";
+      renderFilms(films, "Nothing found for them.");
+    } catch (e) {
+      $("addHint").textContent = navigator.onLine ? "Couldn't load their films: " + e.message : "You're offline — this needs a connection.";
     }
   }
 
@@ -631,7 +723,13 @@
     editItem = it;
     editTagsChosen = (it.g || []).slice();
     $("editTitle").textContent = it.t + (it.y ? ` (${it.y})` : "");
+    const about = [];
+    if (it.dr) about.push("Director: " + it.dr);
+    if (it.c && it.c.length) about.push("Cast: " + it.c.slice(0, 5).join(", "));
+    if (it.gn && it.gn.length) about.push(it.gn.join(", "));
     $("editStatus").textContent = (statusWord[it.s] || "") + (it.d ? " · " + it.d : "");
+    $("editAbout").textContent = about.join(" · ");
+    $("editAbout").hidden = about.length === 0;
     $("editImdb").hidden = !it.i;
     $("editDelete").hidden = !(it.s === "wanted" && canAdd());
     $("editTagsWrap").hidden = !canAdd();
@@ -767,8 +865,27 @@
   document.querySelectorAll(".chip[data-addkind]").forEach(b => b.addEventListener("click", () => {
     addKind = +b.dataset.addkind;
     document.querySelectorAll(".chip[data-addkind]").forEach(x => x.setAttribute("aria-pressed", x === b));
+    if (addPerson) openPerson(addPerson); else searchTmdb();
+  }));
+  document.querySelectorAll(".chip[data-addmode]").forEach(b => b.addEventListener("click", () => {
+    addMode = b.dataset.addmode;
+    addPerson = null; addPicked = null;
+    document.querySelectorAll(".chip[data-addmode]").forEach(x => x.setAttribute("aria-pressed", x === b));
+    $("addBack").hidden = true;
+    $("addPickedWrap").hidden = true; $("addSubmit").disabled = true;
+    $("addQ").placeholder = addMode === "person" ? "Type an actor or director…" : "Type the title…";
+    $("addResults").innerHTML = "";
+    $("addHint").textContent = addMode === "person"
+      ? "Search a name, tap them, then pick one of their films."
+      : "Search, tap the right one, then pick who wants it.";
     searchTmdb();
   }));
+  $("addBack").addEventListener("click", () => {
+    addPerson = null; addPicked = null;
+    $("addBack").hidden = true;
+    $("addPickedWrap").hidden = true; $("addSubmit").disabled = true;
+    searchTmdb();
+  });
 
   $("fab").addEventListener("click", () => openSheet(""));
   $("sheetClose").addEventListener("click", closeSheet);
