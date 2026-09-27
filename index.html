@@ -19,10 +19,11 @@
     --accent: #2563eb; --accent-text: #ffffff;
     --ok-bg: #dcfce7; --ok-fg: #166534; --ok-banner: #f0fdf4; --ok-border: #bbf7d0;
     --todo-bg: #fef3c7; --todo-fg: #92400e; --todo-banner: #fffbeb; --todo-border: #fde68a;
+    --want-bg: #ede9fe; --want-fg: #5b21b6; --want-banner: #f5f3ff; --want-border: #ddd6fe;
     --gone-bg: #e5e7eb; --gone-fg: #374151; --gone-banner: #f3f4f6; --gone-border: #d1d5db;
     --no-banner: #fef2f2; --no-border: #fecaca; --no-fg: #991b1b;
     --info-banner: #eff6ff; --info-border: #bfdbfe; --info-fg: #1e3a8a;
-    --poster: #e5e7eb;
+    --poster: #e5e7eb; --shadow: 0 8px 30px rgba(15,23,42,.18);
   }
   @media (prefers-color-scheme: dark) {
     :root {
@@ -30,10 +31,11 @@
       --accent: #3b82f6;
       --ok-bg: #14532d; --ok-fg: #bbf7d0; --ok-banner: #0f2a1a; --ok-border: #166534;
       --todo-bg: #4a3410; --todo-fg: #fde68a; --todo-banner: #2a2010; --todo-border: #854d0e;
+      --want-bg: #3b2a6b; --want-fg: #ddd6fe; --want-banner: #221a3d; --want-border: #4c1d95;
       --gone-bg: #30343b; --gone-fg: #d1d5db; --gone-banner: #1f2329; --gone-border: #3f444c;
       --no-banner: #2a1414; --no-border: #7f1d1d; --no-fg: #fecaca;
       --info-banner: #111d33; --info-border: #1e3a8a; --info-fg: #bfdbfe;
-      --poster: #2a2f37;
+      --poster: #2a2f37; --shadow: 0 8px 30px rgba(0,0,0,.5);
     }
   }
   * { box-sizing: border-box; }
@@ -41,10 +43,9 @@
     font: 16px/1.4 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
     -webkit-text-size-adjust: 100%; }
   body { padding: env(safe-area-inset-top) 0 env(safe-area-inset-bottom); }
-  .wrap { max-width: 720px; margin: 0 auto; padding: 0 16px 40px; }
+  .wrap { max-width: 720px; margin: 0 auto; padding: 0 16px 90px; }
   [hidden] { display: none !important; }
 
-  /* Unlock screen */
   .lock { min-height: 100vh; display: flex; flex-direction: column; justify-content: center; gap: 14px; padding: 24px 0; }
   .lock img { width: 72px; height: 72px; border-radius: 18px; }
   .lock h1 { margin: 0; font-size: 26px; }
@@ -54,10 +55,10 @@
   .field:focus { border-color: var(--accent); }
   .btn { font: inherit; font-weight: 600; padding: 13px 16px; border-radius: 12px; border: 0; background: var(--accent);
     color: var(--accent-text); cursor: pointer; }
+  .btn:disabled { opacity: .5; }
   .btn.ghost { background: transparent; color: var(--accent); padding: 8px 10px; font-weight: 500; }
   .error { color: var(--no-fg); min-height: 1.4em; }
 
-  /* Header + search */
   header { position: sticky; top: 0; z-index: 5; background: var(--bg); padding: 12px 0 10px; }
   .top { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 10px; }
   .top h1 { margin: 0; font-size: 22px; }
@@ -72,19 +73,21 @@
   .answer .mark { font-weight: 700; font-size: 20px; line-height: 1.1; }
   .answer.ok { background: var(--ok-banner); border-color: var(--ok-border); color: var(--ok-fg); }
   .answer.todo { background: var(--todo-banner); border-color: var(--todo-border); color: var(--todo-fg); }
+  .answer.want { background: var(--want-banner); border-color: var(--want-border); color: var(--want-fg); }
   .answer.gone { background: var(--gone-banner); border-color: var(--gone-border); color: var(--gone-fg); }
   .answer.no { background: var(--no-banner); border-color: var(--no-border); color: var(--no-fg); }
   .answer.info { background: var(--info-banner); border-color: var(--info-border); color: var(--info-fg); }
+  .answer .add { margin-left: auto; white-space: nowrap; }
 
   .chips { display: flex; gap: 6px; overflow-x: auto; padding: 10px 0 2px; scrollbar-width: none; }
   .chips::-webkit-scrollbar { display: none; }
   .chip { flex: 0 0 auto; font: inherit; font-size: 14px; padding: 6px 12px; border-radius: 999px; border: 1px solid var(--border);
     background: var(--surface); color: var(--text); cursor: pointer; }
   .chip[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: var(--accent-text); }
+  .chip.tag[aria-pressed="true"] { background: var(--want-fg); border-color: var(--want-fg); color: #fff; }
   .chips .sep { flex: 0 0 1px; background: var(--border); margin: 4px 4px; }
   select.chip { appearance: none; -webkit-appearance: none; padding-right: 12px; }
 
-  /* List */
   .count { color: var(--muted); font-size: 13px; margin: 8px 2px; }
   ul { list-style: none; margin: 0; padding: 0; background: var(--surface); border: 1px solid var(--border); border-radius: 14px; overflow: hidden; }
   li { display: flex; gap: 12px; align-items: center; padding: 10px 12px; border-top: 1px solid var(--border); }
@@ -95,14 +98,34 @@
   .title { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .year { color: var(--muted); font-weight: 400; }
   .meta { color: var(--muted); font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .meta .who { color: var(--want-fg); font-weight: 600; }
   .pill { flex: 0 0 auto; font-size: 12px; font-weight: 600; padding: 3px 9px; border-radius: 999px; }
-  .pill.s1 { background: var(--ok-bg); color: var(--ok-fg); }
-  .pill.s0 { background: var(--todo-bg); color: var(--todo-fg); }
-  .pill.s2 { background: var(--gone-bg); color: var(--gone-fg); }
-  li.removed { opacity: .65; }
+  .pill.ripped { background: var(--ok-bg); color: var(--ok-fg); }
+  .pill.todo { background: var(--todo-bg); color: var(--todo-fg); }
+  .pill.wanted { background: var(--want-bg); color: var(--want-fg); }
+  .pill.removed { background: var(--gone-bg); color: var(--gone-fg); }
+  li.is-removed { opacity: .65; }
   .more { display: block; width: 100%; margin-top: 10px; }
   footer { color: var(--muted); font-size: 12px; text-align: center; margin-top: 20px; line-height: 1.6; }
   .menu { display: flex; gap: 4px; }
+
+  /* Add button + sheet */
+  .fab { position: fixed; right: max(16px, env(safe-area-inset-right)); bottom: calc(18px + env(safe-area-inset-bottom));
+    width: 58px; height: 58px; border-radius: 50%; border: 0; background: var(--accent); color: #fff; font-size: 30px;
+    line-height: 1; box-shadow: var(--shadow); cursor: pointer; z-index: 20; }
+  .sheet { position: fixed; inset: 0; z-index: 30; background: rgba(15,23,42,.45); display: flex; align-items: flex-end; }
+  .sheet-inner { background: var(--bg); width: 100%; max-height: 92vh; border-radius: 18px 18px 0 0; padding: 16px 16px calc(16px + env(safe-area-inset-bottom));
+    display: flex; flex-direction: column; gap: 10px; overflow: auto; }
+  @media (min-width: 700px) { .sheet { align-items: center; } .sheet-inner { max-width: 640px; margin: 0 auto; border-radius: 18px; } }
+  .sheet h2 { margin: 0; font-size: 20px; }
+  .sheet .rows { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; overflow: hidden; }
+  .sheet .rows li { cursor: pointer; }
+  .sheet .rows li[aria-selected="true"] { background: var(--info-banner); }
+  .sheet-actions { display: flex; gap: 8px; }
+  .sheet-actions .btn { flex: 1; }
+  .hint { color: var(--muted); font-size: 13px; }
+  .toast { position: fixed; left: 50%; transform: translateX(-50%); bottom: calc(90px + env(safe-area-inset-bottom));
+    background: var(--text); color: var(--bg); padding: 10px 16px; border-radius: 999px; font-size: 14px; z-index: 40; box-shadow: var(--shadow); }
 </style>
 </head>
 <body>
@@ -120,7 +143,6 @@
     </form>
   </section>
 
-  <!-- Loading / errors before unlock -->
   <section id="status" class="lock" hidden>
     <img src="icon-512.png" alt="">
     <h1>Rip List</h1>
@@ -142,16 +164,20 @@
       </div>
       <div class="search">
         <svg class="icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.5"/><path d="M15.5 15.5 21 21"/></svg>
-        <input id="q" class="field" type="text" enterkeyhint="search" autocomplete="off" autocorrect="off" autocapitalize="off"
+        <input id="q" class="field" type="text" enterkeyhint="search" inputmode="search" autocomplete="off" autocorrect="off" autocapitalize="off"
                spellcheck="false" placeholder="Have I got it? Type a title…">
         <button class="clear" id="clearBtn" type="button" aria-label="Clear" hidden>×</button>
       </div>
-      <div id="answer" class="answer" hidden><span class="mark" id="answerMark"></span><span id="answerText"></span></div>
+      <div id="answer" class="answer" hidden>
+        <span class="mark" id="answerMark"></span><span id="answerText"></span>
+        <button class="btn ghost add" id="answerAdd" type="button" hidden>Add it</button>
+      </div>
       <div class="chips" role="toolbar">
         <button class="chip" data-status="all" aria-pressed="true">All</button>
-        <button class="chip" data-status="1" aria-pressed="false">Ripped</button>
-        <button class="chip" data-status="0" aria-pressed="false">To rip</button>
-        <button class="chip" data-status="2" aria-pressed="false" id="removedChip" hidden>Removed</button>
+        <button class="chip" data-status="wanted" aria-pressed="false" id="wantedChip" hidden>Wanted</button>
+        <button class="chip" data-status="ripped" aria-pressed="false">Ripped</button>
+        <button class="chip" data-status="todo" aria-pressed="false">To rip</button>
+        <button class="chip" data-status="removed" aria-pressed="false" id="removedChip" hidden>Removed</button>
         <span class="sep"></span>
         <button class="chip" data-kind="all" aria-pressed="true">Movies &amp; TV</button>
         <button class="chip" data-kind="0" aria-pressed="false">Movies</button>
@@ -163,6 +189,7 @@
           <option value="added">Recently added</option>
         </select>
       </div>
+      <div class="chips" id="tagChips" hidden></div>
     </header>
 
     <div class="count" id="count"></div>
@@ -177,59 +204,96 @@
   </main>
 </div>
 
+<button class="fab" id="fab" type="button" aria-label="Add a movie to a wishlist" hidden>+</button>
+
+<!-- Add to wishlist -->
+<div class="sheet" id="sheet" hidden>
+  <div class="sheet-inner">
+    <div class="top">
+      <h2>Add to a wishlist</h2>
+      <button class="btn ghost" id="sheetClose" type="button">Close</button>
+    </div>
+    <div class="chips">
+      <button class="chip" data-addkind="0" aria-pressed="true">Movie</button>
+      <button class="chip" data-addkind="1" aria-pressed="false">TV show</button>
+    </div>
+    <input id="addQ" class="field" type="text" enterkeyhint="search" autocomplete="off" autocorrect="off" spellcheck="false"
+           placeholder="Type the title…">
+    <div class="hint" id="addHint">Search, tap the right one, then pick who wants it.</div>
+    <ul class="rows" id="addResults"></ul>
+    <div id="addPickedWrap" hidden>
+      <div class="hint">Add for:</div>
+      <div class="chips" id="addTags"></div>
+    </div>
+    <div class="sheet-actions">
+      <button class="btn" id="addSubmit" type="button" disabled>Add to list</button>
+    </div>
+  </div>
+</div>
+
 <script>
 (() => {
   "use strict";
   const PASS_KEY = "ripList.passphrase";
+  const PENDING_KEY = "ripList.pending";
   const DATA_URL = "list.enc.json";
-  const PAGE = 150;              // rows rendered at a time
+  const PAGE = 150;
   const $ = (id) => document.getElementById(id);
 
-  let items = [];                // decrypted list
+  let items = [], pending = [], tags = [], cfg = null, envelope = null, passphrase = null;
   let updatedAt = null;
-  let statusFilter = "all", kindFilter = "all", sortBy = "title", shown = PAGE;
+  let statusFilter = "all", kindFilter = "all", tagFilter = null, sortBy = "title", shown = PAGE;
 
-  // ---------- storage (can fail in private mode) ----------
   const store = {
     get(k) { try { return localStorage.getItem(k); } catch { return null; } },
     set(k, v) { try { localStorage.setItem(k, v); } catch {} },
     del(k) { try { localStorage.removeItem(k); } catch {} }
   };
 
-  // ---------- helpers ----------
   const b64 = (s) => Uint8Array.from(atob(s), c => c.charCodeAt(0));
+  const toB64 = (bytes) => { let s = ""; for (const b of new Uint8Array(bytes)) s += String.fromCharCode(b); return btoa(s); };
   const esc = (s) => String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+  const uid = () => (crypto.randomUUID ? crypto.randomUUID() : Date.now().toString(36) + Math.random().toString(36).slice(2, 10));
 
-  // Same rules as the PC app: lower-case, no accents, no punctuation, "&" = "and", apostrophes dropped.
   function norm(s) {
-    return String(s ?? "").replace(/&/g, " and ").normalize("NFD").replace(/[\u0300-\u036f]/g, "")
+    return String(s ?? "").replace(/&/g, " and ").normalize("NFD").replace(/[̀-ͯ]/g, "")
       .replace(/['’]/g, "").toLowerCase().replace(/[^\p{L}\p{N}]+/gu, " ").trim();
   }
-
-  function show(which) {
-    for (const id of ["lock", "status", "app"]) $(id).hidden = (id !== which);
-  }
+  function show(which) { for (const id of ["lock", "status", "app"]) $(id).hidden = (id !== which); }
   function setStatus(text) { $("statusText").textContent = text; show("status"); }
+  function toast(text) {
+    const el = document.createElement("div");
+    el.className = "toast"; el.textContent = text;
+    document.body.appendChild(el);
+    setTimeout(() => el.remove(), 3500);
+  }
 
-  // ---------- data ----------
+  // ---------- locking / unlocking ----------
+  async function deriveKey(pass, salt, iterations) {
+    const keyMaterial = await crypto.subtle.importKey("raw", new TextEncoder().encode(pass), "PBKDF2", false, ["deriveKey"]);
+    return crypto.subtle.deriveKey({ name: "PBKDF2", salt, iterations, hash: "SHA-256" },
+      keyMaterial, { name: "AES-GCM", length: 256 }, false, ["encrypt", "decrypt"]);
+  }
+  async function decrypt(env, pass) {
+    const key = await deriveKey(pass, b64(env.salt), env.iter);
+    const plain = await crypto.subtle.decrypt({ name: "AES-GCM", iv: b64(env.iv) }, key, b64(env.data));
+    return JSON.parse(new TextDecoder().decode(plain));
+  }
+  async function encrypt(obj, pass) {
+    const salt = crypto.getRandomValues(new Uint8Array(16));
+    const iv = crypto.getRandomValues(new Uint8Array(12));
+    const iterations = 200000;
+    const key = await deriveKey(pass, salt, iterations);
+    const data = await crypto.subtle.encrypt({ name: "AES-GCM", iv }, key, new TextEncoder().encode(JSON.stringify(obj)));
+    return { v: 1, iter: iterations, salt: toB64(salt), iv: toB64(iv), data: toB64(data), updated: new Date().toISOString() };
+  }
+
   async function fetchEncrypted() {
-    // Always try the network first (bypassing caches); the service worker falls back to the saved copy offline.
     const res = await fetch(DATA_URL + "?t=" + Date.now(), { cache: "no-store" });
     if (!res.ok) throw new Error(res.status === 404 ? "nolist" : "HTTP " + res.status);
     return res.json();
   }
 
-  async function decrypt(env, pass) {
-    const enc = new TextEncoder();
-    const keyMaterial = await crypto.subtle.importKey("raw", enc.encode(pass), "PBKDF2", false, ["deriveKey"]);
-    const key = await crypto.subtle.deriveKey(
-      { name: "PBKDF2", salt: b64(env.salt), iterations: env.iter, hash: "SHA-256" },
-      keyMaterial, { name: "AES-GCM", length: 256 }, false, ["decrypt"]);
-    const plain = await crypto.subtle.decrypt({ name: "AES-GCM", iv: b64(env.iv) }, key, b64(env.data));
-    return JSON.parse(new TextDecoder().decode(plain));
-  }
-
-  let envelope = null;
   async function load(passFromForm) {
     if (!window.crypto || !crypto.subtle) { setStatus("This browser can't open the list. Try Safari or Chrome."); return; }
     try {
@@ -245,11 +309,18 @@
     try {
       const data = await decrypt(envelope, pass);
       store.set(PASS_KEY, pass);
+      passphrase = pass;
       items = (data.items || []).map(prep);
+      tags = data.tags || [];
+      cfg = data.req || null;
       updatedAt = data.updated ? new Date(data.updated) : null;
+      pending = loadPending();
       $("lockError").textContent = "";
       show("app");
+      buildTagChips();
+      $("fab").hidden = !canAdd();
       render();
+      sendPending();
     } catch {
       store.del(PASS_KEY);
       $("lockError").textContent = passFromForm
@@ -260,52 +331,100 @@
   }
 
   function prep(it) {
-    // t=title y=year s=status(0 to rip,1 ripped,2 removed) k=kind(0 movie,1 tv) i=imdb p=poster a=added d=disk n=notes
-    it.hay = " " + norm(it.t) + " " + (it.y || "") + " " + (it.i || "").toLowerCase() + " ";
+    // t=title y=year s=status(wanted|todo|ripped|removed) k=kind(0 movie,1 tv) i=imdb p=poster a=added d=disk n=notes g=wishlists
+    it.g = it.g || [];
+    it.hay = " " + norm(it.t) + " " + (it.y || "") + " " + (it.i || "").toLowerCase() + " " + norm(it.g.join(" ")) + " ";
     it.sortT = norm(it.t).replace(/^(the|a|an) /, "");
     return it;
   }
 
-  // ---------- rendering ----------
-  const statusWord = ["To rip", "✓ Ripped", "Removed"];
+  const statusWord = { wanted: "Wanted", todo: "To rip", ripped: "✓ Ripped", removed: "Removed" };
 
+  // ---------- pending (added here, not on the PC yet) ----------
+  function loadPending() {
+    try {
+      const raw = JSON.parse(store.get(PENDING_KEY) || "[]");
+      return Array.isArray(raw) ? raw : [];
+    } catch { return []; }
+  }
+  function savePending() { store.set(PENDING_KEY, JSON.stringify(pending)); }
+
+  function pendingAsItems() {
+    // Drop any that already came back in the published list.
+    pending = pending.filter(p => !items.some(it =>
+      (p.tmdbId && it.tmdbId === p.tmdbId) || (norm(it.t) === norm(p.title) && (it.y || 0) === (p.year || 0))));
+    savePending();
+    return pending.map(p => prep({
+      t: p.title, y: p.year, s: "wanted", k: p.kind === "TvShow" ? 1 : 0, i: p.imdbId || "",
+      p: p.poster || "", a: (p.created || "").slice(0, 10), d: "", n: p.sent ? "" : "waiting for signal",
+      g: p.tags || [], tmdbId: p.tmdbId, local: true
+    }));
+  }
+
+  function canAdd() { return !!(cfg && cfg.on && cfg.o && cfg.r && cfg.t); }
+
+  // ---------- rendering ----------
   function matches(it, tokens) {
     for (const t of tokens) if (!it.hay.includes(t)) return false;
     return true;
   }
 
+  function buildTagChips() {
+    const box = $("tagChips");
+    if (!tags.length) { box.hidden = true; return; }
+    box.hidden = false;
+    box.innerHTML = `<button class="chip tag" data-tag="" aria-pressed="true">Everyone</button>` +
+      tags.map(t => `<button class="chip tag" data-tag="${esc(t)}" aria-pressed="false">${esc(t)}</button>`).join("");
+    box.querySelectorAll(".chip.tag").forEach(b => b.addEventListener("click", () => {
+      tagFilter = b.dataset.tag || null; shown = PAGE;
+      box.querySelectorAll(".chip.tag").forEach(x => x.setAttribute("aria-pressed", x === b));
+      render();
+    }));
+  }
+
+  function allItems() { return pendingAsItems().concat(items); }
+
   function render() {
     const qText = $("q").value.trim();
     const tokens = norm(qText).split(" ").filter(Boolean);
     $("clearBtn").hidden = !qText;
+    const everything = allItems();
 
-    // Answer banner (ignores the filter chips on purpose)
-    const hits = tokens.length ? items.filter(it => matches(it, tokens)) : [];
+    const hits = tokens.length ? everything.filter(it => matches(it, tokens)) : [];
     const ans = $("answer");
+    $("answerAdd").hidden = true;
     if (!tokens.length) {
       ans.hidden = true;
     } else {
       ans.hidden = false;
       let cls, mark, text;
-      if (hits.length === 0) { cls = "no"; mark = "✗"; text = `“${qText}” is not on your list.`; }
-      else if (hits.length === 1) {
+      if (hits.length === 0) {
+        cls = "no"; mark = "✗"; text = `“${qText}” is not on your list.`;
+        if (canAdd()) { $("answerAdd").hidden = false; }
+      } else if (hits.length === 1) {
         const h = hits[0], name = h.t + (h.y ? ` (${h.y})` : "");
-        if (h.s === 1) { cls = "ok"; mark = "✓"; text = `Yes, you've ripped ${name}.`; }
-        else if (h.s === 2) { cls = "gone"; mark = "⊘"; text = `${name} was ripped, but its folder was removed from the drive.`; }
-        else { cls = "todo"; mark = "○"; text = `${name} is on your list but NOT ripped yet.`; }
+        if (h.s === "ripped") { cls = "ok"; mark = "✓"; text = `Yes, you've ripped ${name}.`; }
+        else if (h.s === "removed") { cls = "gone"; mark = "⊘"; text = `${name} was ripped, but its folder was removed from the drive.`; }
+        else if (h.s === "wanted") {
+          cls = "want"; mark = "★";
+          text = `${name} is on the wishlist${h.g.length ? ` (${h.g.join(", ")})` : ""} — not ripped yet.`;
+        } else { cls = "todo"; mark = "○"; text = `${name} is on your list but NOT ripped yet.`; }
       } else {
-        const r = hits.filter(h => h.s === 1).length, g = hits.filter(h => h.s === 2).length;
-        cls = "info"; mark = "≡"; text = `${hits.length} matches: ${r} ripped, ${hits.length - r - g} to rip${g ? `, ${g} removed` : ""}.`;
+        const r = hits.filter(h => h.s === "ripped").length;
+        const g = hits.filter(h => h.s === "removed").length;
+        const w = hits.filter(h => h.s === "wanted").length;
+        cls = "info"; mark = "≡";
+        text = `${hits.length} matches: ${r} ripped, ${hits.length - r - g - w} to rip` + (w ? `, ${w} wanted` : "") + (g ? `, ${g} removed` : "") + ".";
       }
       ans.className = "answer " + cls;
       $("answerMark").textContent = mark;
       $("answerText").textContent = text;
     }
 
-    // List
-    let list = items.filter(it =>
-      (statusFilter === "all" || it.s === +statusFilter) &&
+    let list = everything.filter(it =>
+      (statusFilter === "all" || it.s === statusFilter) &&
       (kindFilter === "all" || it.k === +kindFilter) &&
+      (!tagFilter || (it.g || []).some(t => t.toLowerCase() === tagFilter.toLowerCase())) &&
       (!tokens.length || matches(it, tokens)));
 
     if (sortBy === "year") list.sort((a, b) => (b.y || 0) - (a.y || 0) || a.sortT.localeCompare(b.sortT));
@@ -316,11 +435,15 @@
     $("list").innerHTML = slice.map(rowHtml).join("");
     $("list").hidden = slice.length === 0;
     $("moreBtn").hidden = list.length <= shown;
-    $("count").textContent = list.length === items.length ? `${items.length} titles` : `Showing ${list.length} of ${items.length}`;
+    $("count").textContent = list.length === everything.length ? `${everything.length} titles` : `Showing ${list.length} of ${everything.length}`;
 
-    const ripped = items.filter(i => i.s === 1).length, removed = items.filter(i => i.s === 2).length;
-    $("totals").textContent = `${items.length} titles · ${ripped} ripped · ${items.length - ripped - removed} to rip` + (removed ? ` · ${removed} removed` : "");
+    const ripped = everything.filter(i => i.s === "ripped").length;
+    const removed = everything.filter(i => i.s === "removed").length;
+    const wanted = everything.filter(i => i.s === "wanted").length;
+    $("totals").textContent = `${everything.length} titles · ${ripped} ripped · ${everything.length - ripped - removed - wanted} to rip`
+      + (wanted ? ` · ${wanted} wanted` : "") + (removed ? ` · ${removed} removed` : "");
     $("removedChip").hidden = removed === 0;
+    $("wantedChip").hidden = wanted === 0;
     $("updated").textContent = updatedAt ? "List from " + updatedAt.toLocaleString([], { dateStyle: "medium", timeStyle: "short" }) : "";
   }
 
@@ -328,13 +451,146 @@
     const poster = it.p
       ? `<img class="poster" loading="lazy" alt="" src="https://image.tmdb.org/t/p/w92${esc(it.p)}" onerror="this.removeAttribute('src')">`
       : `<span class="poster"></span>`;
-    const meta = [it.k === 1 ? "TV" : "Movie", it.d, it.n].filter(Boolean).map(esc).join(" · ");
+    const bits = [];
+    if (it.g && it.g.length) bits.push(`<span class="who">${esc(it.g.join(", "))}</span>`);
+    bits.push(esc(it.k === 1 ? "TV" : "Movie"));
+    if (it.d) bits.push(esc(it.d));
+    if (it.n) bits.push(esc(it.n));
     const inner = `${poster}<div class="info"><div class="title">${esc(it.t)}${it.y ? ` <span class="year">(${it.y})</span>` : ""}</div>` +
-                  `<div class="meta">${meta}</div></div><span class="pill s${it.s}">${statusWord[it.s] || ""}</span>`;
-    const cls = it.s === 2 ? ' class="removed"' : "";
+                  `<div class="meta">${bits.join(" · ")}</div></div>` +
+                  `<span class="pill ${esc(it.s)}">${esc(statusWord[it.s] || "")}</span>`;
+    const cls = it.s === "removed" ? ' class="is-removed"' : "";
     return it.i
       ? `<li${cls}><a href="https://www.imdb.com/title/${esc(it.i)}/" target="_blank" rel="noopener">${inner}</a></li>`
       : `<li${cls}>${inner}</li>`;
+  }
+
+  // ---------- adding a request ----------
+  let addKind = 0, addPicked = null, addTagsChosen = [], addResults = [], addTimer = null;
+
+  function openSheet(prefill) {
+    if (!canAdd()) return;
+    addPicked = null; addResults = []; addTagsChosen = [];
+    $("addResults").innerHTML = ""; $("addPickedWrap").hidden = true;
+    $("addSubmit").disabled = true; $("addSubmit").textContent = "Add to list";
+    $("addHint").textContent = "Search, tap the right one, then pick who wants it.";
+    $("addQ").value = prefill || "";
+    $("sheet").hidden = false;
+    renderAddTags();
+    setTimeout(() => $("addQ").focus(), 60);
+    if (prefill) searchTmdb();
+  }
+  function closeSheet() { $("sheet").hidden = true; }
+
+  function renderAddTags() {
+    const box = $("addTags");
+    if (!tags.length) { box.innerHTML = `<span class="hint">No wishlists set up on the PC yet — it'll just be marked Wanted.</span>`; return; }
+    box.innerHTML = tags.map(t =>
+      `<button class="chip tag" type="button" data-addtag="${esc(t)}" aria-pressed="${addTagsChosen.includes(t)}">${esc(t)}</button>`).join("");
+    box.querySelectorAll("[data-addtag]").forEach(b => b.addEventListener("click", () => {
+      const t = b.dataset.addtag;
+      addTagsChosen = addTagsChosen.includes(t) ? addTagsChosen.filter(x => x !== t) : addTagsChosen.concat(t);
+      b.setAttribute("aria-pressed", addTagsChosen.includes(t));
+    }));
+  }
+
+  async function searchTmdb() {
+    const q = $("addQ").value.trim();
+    if (q.length < 2) { $("addResults").innerHTML = ""; return; }
+    if (!cfg.tmdb) { $("addHint").textContent = "No movie lookup key is set on the PC, so titles can't be searched here."; return; }
+    $("addHint").textContent = "Searching…";
+    try {
+      const path = addKind === 1 ? "search/tv" : "search/movie";
+      const bearer = cfg.tmdb.length > 40;
+      const url = `https://api.themoviedb.org/3/${path}?include_adult=false&language=en-US&page=1&query=${encodeURIComponent(q)}`
+        + (bearer ? "" : `&api_key=${encodeURIComponent(cfg.tmdb)}`);
+      const res = await fetch(url, bearer ? { headers: { Authorization: "Bearer " + cfg.tmdb } } : undefined);
+      if (!res.ok) throw new Error("HTTP " + res.status);
+      const data = await res.json();
+      addResults = (data.results || []).slice(0, 12).map(r => ({
+        tmdbId: r.id,
+        title: addKind === 1 ? r.name : r.title,
+        year: parseInt((addKind === 1 ? r.first_air_date : r.release_date) || "", 10) || null,
+        poster: r.poster_path || ""
+      }));
+      $("addHint").textContent = addResults.length ? "Tap the right one." : "No matches. Try a different spelling.";
+      $("addResults").innerHTML = addResults.map((r, i) => {
+        const owned = allItems().find(it => it.tmdbId === r.tmdbId || (norm(it.t) === norm(r.title) && (it.y || 0) === (r.year || 0)));
+        const note = owned ? `<div class="meta">Already on the list · ${esc(statusWord[owned.s] || "")}</div>` : "";
+        const poster = r.poster
+          ? `<img class="poster" loading="lazy" alt="" src="https://image.tmdb.org/t/p/w92${esc(r.poster)}" onerror="this.removeAttribute('src')">`
+          : `<span class="poster"></span>`;
+        return `<li data-i="${i}" aria-selected="false">${poster}<div class="info"><div class="title">${esc(r.title)}` +
+               `${r.year ? ` <span class="year">(${r.year})</span>` : ""}</div>${note}</div></li>`;
+      }).join("");
+      $("addResults").querySelectorAll("li").forEach(li => li.addEventListener("click", () => {
+        $("addResults").querySelectorAll("li").forEach(x => x.setAttribute("aria-selected", "false"));
+        li.setAttribute("aria-selected", "true");
+        addPicked = addResults[+li.dataset.i];
+        $("addPickedWrap").hidden = false;
+        $("addSubmit").disabled = false;
+      }));
+    } catch (e) {
+      $("addHint").textContent = navigator.onLine ? "Search failed: " + e.message : "You're offline — search needs a connection.";
+    }
+  }
+
+  async function submitRequest() {
+    if (!addPicked) return;
+    const request = {
+      id: uid(),
+      title: addPicked.title,
+      year: addPicked.year,
+      kind: addKind === 1 ? "TvShow" : "Movie",
+      tmdbId: addPicked.tmdbId,
+      imdbId: "",
+      poster: addPicked.poster,
+      tags: addTagsChosen.slice(),
+      created: new Date().toISOString(),
+      sent: false
+    };
+    pending.push(request);
+    savePending();
+    closeSheet();
+    render();
+    toast(`Added ${request.title}. It'll appear on the PC next time it checks.`);
+    sendPending();
+  }
+
+  async function sendOne(request) {
+    const body = await encrypt({
+      id: request.id, title: request.title, year: request.year, kind: request.kind,
+      tmdbId: request.tmdbId, imdbId: request.imdbId, poster: request.poster,
+      tags: request.tags, created: request.created
+    }, passphrase);
+    const url = `https://api.github.com/repos/${encodeURIComponent(cfg.o)}/${encodeURIComponent(cfg.r)}/contents/requests/${request.id}.json`;
+    const res = await fetch(url, {
+      method: "PUT",
+      headers: {
+        Authorization: "Bearer " + cfg.t,
+        Accept: "application/vnd.github+json",
+        "X-GitHub-Api-Version": "2022-11-28",
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({ message: "Wishlist request", content: toB64(new TextEncoder().encode(JSON.stringify(body))) })
+    });
+    if (!res.ok && res.status !== 422) throw new Error("HTTP " + res.status);   // 422 = already there
+  }
+
+  async function sendPending() {
+    if (!canAdd() || !passphrase) return;
+    let changed = false;
+    for (const request of pending) {
+      if (request.sent) continue;
+      try {
+        await sendOne(request);
+        request.sent = true;
+        changed = true;
+      } catch {
+        break;   // no signal or GitHub refused; try again later
+      }
+    }
+    if (changed) { savePending(); render(); }
   }
 
   // ---------- events ----------
@@ -349,6 +605,7 @@
   $("clearBtn").addEventListener("click", () => { $("q").value = ""; shown = PAGE; render(); $("q").focus(); });
   $("moreBtn").addEventListener("click", () => { shown += PAGE * 2; render(); });
   $("sort").addEventListener("change", (e) => { sortBy = e.target.value; shown = PAGE; render(); });
+  $("answerAdd").addEventListener("click", () => openSheet($("q").value.trim()));
 
   document.querySelectorAll(".chip[data-status]").forEach(b => b.addEventListener("click", () => {
     statusFilter = b.dataset.status; shown = PAGE;
@@ -360,25 +617,37 @@
     document.querySelectorAll(".chip[data-kind]").forEach(x => x.setAttribute("aria-pressed", x === b));
     render();
   }));
+  document.querySelectorAll(".chip[data-addkind]").forEach(b => b.addEventListener("click", () => {
+    addKind = +b.dataset.addkind;
+    document.querySelectorAll(".chip[data-addkind]").forEach(x => x.setAttribute("aria-pressed", x === b));
+    searchTmdb();
+  }));
+
+  $("fab").addEventListener("click", () => openSheet(""));
+  $("sheetClose").addEventListener("click", closeSheet);
+  $("sheet").addEventListener("click", (e) => { if (e.target === $("sheet")) closeSheet(); });
+  $("addQ").addEventListener("input", () => { clearTimeout(addTimer); addTimer = setTimeout(searchTmdb, 450); });
+  $("addQ").addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); clearTimeout(addTimer); searchTmdb(); } });
+  $("addSubmit").addEventListener("click", submitRequest);
 
   $("refreshBtn").addEventListener("click", async () => {
     $("refreshBtn").textContent = "…";
     envelope = null;
     await load();
+    await sendPending();
     $("refreshBtn").textContent = "↻";
   });
 
   $("lockBtn").addEventListener("click", () => {
     if (!confirm("Forget the passphrase on this phone? You'll need to type it again next time.")) return;
     store.del(PASS_KEY);
-    items = []; $("pass").value = "";
+    items = []; passphrase = null; $("pass").value = "";
     show("lock");
   });
 
-  // ---------- offline support ----------
-  if ("serviceWorker" in navigator) {
-    navigator.serviceWorker.register("sw.js").catch(() => {});
-  }
+  window.addEventListener("online", sendPending);
+
+  if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js").catch(() => {});
 
   setStatus("Loading…");
   load();
