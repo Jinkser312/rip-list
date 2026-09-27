@@ -133,6 +133,21 @@
   li.tappable { cursor: pointer; }
   .btn.danger { color: var(--no-fg); }
   #editTitle { font-size: 19px; }
+  /* Season breakdown in the tap panel - this is the part that scrolls when a show has many seasons */
+  #editSeasonsWrap { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; gap: 6px; }
+  #editSeasonsSummary, #editSeasonsNote { flex: 0 0 auto; }
+  ul.seasons { list-style: none; margin: 0; padding: 0; background: var(--surface); border: 1px solid var(--border);
+    border-radius: 12px; flex: 1 1 auto; min-height: 44px; overflow-y: auto;
+    -webkit-overflow-scrolling: touch; overscroll-behavior: contain; }
+  ul.seasons li { display: flex; justify-content: space-between; gap: 10px; align-items: baseline;
+    padding: 9px 12px; border-bottom: 1px solid var(--border); font-size: 15px; }
+  ul.seasons li:last-child { border-bottom: 0; }
+  ul.seasons .count { font-size: 13px; white-space: nowrap; color: var(--muted); }
+  ul.seasons li.full .count { color: var(--ok-fg); }
+  ul.seasons li.partial .count { color: var(--todo-fg); }
+  ul.seasons li.missing .count { color: var(--no-fg); }
+  ul.seasons li.missing .name { color: var(--muted); }
+  .meta .gap { color: var(--no-fg); }
   .toast { position: fixed; left: 50%; transform: translateX(-50%); bottom: calc(90px + env(safe-area-inset-bottom));
     background: var(--text); color: var(--bg); padding: 10px 16px; border-radius: 999px; font-size: 14px; z-index: 40; box-shadow: var(--shadow); }
 </style>
@@ -253,6 +268,11 @@
     </div>
     <div class="hint" id="editStatus"></div>
     <div class="hint" id="editAbout" hidden></div>
+    <div id="editSeasonsWrap" hidden>
+      <div class="hint" id="editSeasonsSummary"></div>
+      <ul class="seasons" id="editSeasons"></ul>
+      <div class="hint" id="editSeasonsNote"></div>
+    </div>
     <div id="editTagsWrap">
       <div class="hint" style="margin-top:6px">On the wishlists of:</div>
       <div class="chips" id="editTags"></div>
@@ -370,8 +390,10 @@
   }
 
   // t=title y=year s=status k=kind(0/1) i=imdb m=tmdb p=poster a=added d=disk n=notes g=wishlists
+  // sv=seasons on the drive, sx=seasons TMDB says exist (each {n:number, e:episodes})
   function prep(it) {
     it.g = it.g || []; it.c = it.c || []; it.gn = it.gn || [];
+    it.sv = it.sv || []; it.sx = it.sx || [];
     it.titleHay = " " + norm(it.t) + " " + (it.y || "") + " ";
     it.hay = it.titleHay + (it.i || "").toLowerCase() + " " + norm(it.g.join(" ")) + " "
            + norm(it.c.join(" ")) + " " + norm(it.dr || "") + " " + norm(it.gn.join(" ")) + " ";
@@ -532,6 +554,53 @@
     $("updated").textContent = updatedAt ? "List from " + updatedAt.toLocaleString([], { dateStyle: "medium", timeStyle: "short" }) : "";
   }
 
+  // ---------- TV seasons ----------
+  function seasonMap(list) {
+    const m = new Map();
+    for (const s of (list || [])) if (s && typeof s.n === "number") m.set(s.n, s.e || 0);
+    return m;
+  }
+
+  // One row per season: what's on the drive against what TMDB says the show has.
+  // Specials (season 0) only show up when you actually have some.
+  function seasonRows(it) {
+    if (it.k !== 1) return [];
+    const have = seasonMap(it.sv), want = seasonMap(it.sx);
+    const nothingHere = have.size === 0;
+    const nums = Array.from(new Set([...want.keys(), ...have.keys()]))
+      .filter(n => n > 0 || (have.get(n) || 0) > 0).sort((a, b) => a - b);
+    return nums.map(n => {
+      const h = have.get(n) || 0, w = want.get(n);
+      const name = n === 0 ? "Specials" : "Season " + n;
+      if (nothingHere) return { name, count: w + (w === 1 ? " episode" : " episodes"), state: "plain" };
+      if (w === undefined) return { name, count: h + (h === 1 ? " episode" : " episodes"), state: "plain" };
+      if (h === 0) return { name, count: "missing · " + w + (w === 1 ? " episode" : " episodes"), state: "missing" };
+      if (h < w) return { name, count: h + " of " + w, state: "partial" };
+      return { name, count: h + " of " + w + " ✓", state: "full" };
+    });
+  }
+
+  function seasonSummary(it) {
+    if (it.k !== 1) return "";
+    const haveSeasons = it.sv.filter(s => s.n > 0).length;
+    const haveEps = it.sv.reduce((a, s) => a + (s.e || 0), 0);
+    const want = it.sx.filter(s => s.n > 0);
+    const wantEps = want.reduce((a, s) => a + (s.e || 0), 0);
+    if (!want.length) {
+      if (!haveSeasons && !haveEps) return "";
+      return `${haveSeasons} season${haveSeasons === 1 ? "" : "s"} · ${haveEps} episode${haveEps === 1 ? "" : "s"}`;
+    }
+    if (!it.sv.length) return `${want.length} season${want.length === 1 ? "" : "s"} · ${wantEps} episodes (none on the drive)`;
+    return `${haveSeasons} of ${want.length} seasons · ${haveEps} of ${wantEps} episodes`;
+  }
+
+  // Whole seasons you don't have a single episode of.
+  function missingSeasons(it) {
+    if (it.k !== 1) return [];
+    const have = seasonMap(it.sv);
+    return it.sx.filter(s => s.n > 0 && !(have.get(s.n) > 0)).map(s => "Season " + s.n);
+  }
+
   function rowHtml(it, index) {
     const poster = it.p
       ? `<img class="poster" loading="lazy" alt="" src="https://image.tmdb.org/t/p/w92${esc(it.p)}" onerror="this.removeAttribute('src')">`
@@ -539,7 +608,12 @@
     const bits = [];
     if (it.g && it.g.length) bits.push(`<span class="who">${esc(it.g.join(", "))}</span>`);
     bits.push(esc(it.k === 1 ? "TV" : "Movie"));
-    if (it.d) bits.push(esc(it.d));
+    // Only shows seasons once something is actually on the drive, so Wanted rows stay quiet.
+    const seasonBit = it.sv.length ? seasonSummary(it) : "";
+    if (seasonBit) bits.push(esc(seasonBit));
+    else if (it.d) bits.push(esc(it.d));
+    const gaps = it.sv.length ? missingSeasons(it) : [];
+    if (gaps.length) bits.push(`<span class="gap">missing ${esc(gaps.join(", "))}</span>`);
     if (it.dr || (it.c && it.c.length)) bits.push(esc([it.dr].concat((it.c || []).slice(0, 2)).filter(Boolean).join(", ")));
     if (it.n) bits.push(esc(it.n));
     if (it.pendingEdit) bits.push("change waiting");
@@ -734,9 +808,12 @@
     if (it.dr) about.push("Director: " + it.dr);
     if (it.c && it.c.length) about.push("Cast: " + it.c.slice(0, 5).join(", "));
     if (it.gn && it.gn.length) about.push(it.gn.join(", "));
-    $("editStatus").textContent = (statusWord[it.s] || "") + (it.d ? " · " + it.d : "");
+    // The season block below repeats what "d" says for TV, so don't say it twice.
+    const showsSeasons = it.k === 1 && seasonRows(it).length > 0;
+    $("editStatus").textContent = (statusWord[it.s] || "") + (it.d && !showsSeasons ? " · " + it.d : "");
     $("editAbout").textContent = about.join(" · ");
     $("editAbout").hidden = about.length === 0;
+    renderSeasons(it);
     $("editImdb").hidden = !it.i;
     $("editDelete").hidden = !(it.s === "wanted" && canAdd());
     $("editTagsWrap").hidden = !canAdd();
@@ -750,6 +827,22 @@
     $("editSheet").hidden = true;
     document.body.classList.remove("sheet-open");
     editItem = null;
+  }
+
+  function renderSeasons(it) {
+    const wrap = $("editSeasonsWrap"), rows = seasonRows(it);
+    if (it.k !== 1 || !rows.length) { wrap.hidden = true; return; }
+    wrap.hidden = false;
+    $("editSeasonsSummary").textContent = seasonSummary(it);
+    $("editSeasons").innerHTML = rows.map(r =>
+      `<li class="${r.state}"><span class="name">${esc(r.name)}</span><span class="count">${esc(r.count)}</span></li>`).join("");
+    const gaps = it.sv.length ? missingSeasons(it) : [];
+    let note = "";
+    if (!it.sx.length) note = "Season list from TMDB hasn't been fetched yet - do it on the PC with ⋯ → Fetch cast, genres and TV season lists.";
+    else if (!it.sv.length) note = "Nothing on the drive yet.";
+    else if (gaps.length) note = "Missing: " + gaps.join(", ");
+    else note = "Every season is here.";
+    $("editSeasonsNote").textContent = note;
   }
 
   function renderEditTags() {
