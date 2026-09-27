@@ -124,6 +124,9 @@
   .sheet-actions { display: flex; gap: 8px; }
   .sheet-actions .btn { flex: 1; }
   .hint { color: var(--muted); font-size: 13px; }
+  li.tappable { cursor: pointer; }
+  .btn.danger { color: var(--no-fg); }
+  #editTitle { font-size: 19px; }
   .toast { position: fixed; left: 50%; transform: translateX(-50%); bottom: calc(90px + env(safe-area-inset-bottom));
     background: var(--text); color: var(--bg); padding: 10px 16px; border-radius: 999px; font-size: 14px; z-index: 40; box-shadow: var(--shadow); }
 </style>
@@ -231,6 +234,27 @@
   </div>
 </div>
 
+<!-- Change or remove -->
+<div class="sheet" id="editSheet" hidden>
+  <div class="sheet-inner">
+    <div class="top">
+      <h2 id="editTitle"></h2>
+      <button class="btn ghost" id="editClose" type="button">Close</button>
+    </div>
+    <div class="hint" id="editStatus"></div>
+    <div id="editTagsWrap">
+      <div class="hint" style="margin-top:6px">On the wishlists of:</div>
+      <div class="chips" id="editTags"></div>
+    </div>
+    <div class="hint" id="editHint"></div>
+    <div class="sheet-actions">
+      <button class="btn" id="editSave" type="button">Save</button>
+      <button class="btn ghost" id="editImdb" type="button">Open on IMDb</button>
+    </div>
+    <button class="btn ghost danger" id="editDelete" type="button">Remove from the list</button>
+  </div>
+</div>
+
 <script>
 (() => {
   "use strict";
@@ -240,9 +264,12 @@
   const PAGE = 150;
   const $ = (id) => document.getElementById(id);
 
-  let items = [], pending = [], tags = [], cfg = null, envelope = null, passphrase = null;
+  let items = [];          // what the PC published
+  let ops = [];            // changes made here that the PC hasn't picked up yet
+  let tags = [], cfg = null, envelope = null, passphrase = null;
   let updatedAt = null;
   let statusFilter = "all", kindFilter = "all", tagFilter = null, sortBy = "title", shown = PAGE;
+  let view = [];           // what's on screen right now (for tapping a row)
 
   const store = {
     get(k) { try { return localStorage.getItem(k); } catch { return null; } },
@@ -254,6 +281,7 @@
   const toB64 = (bytes) => { let s = ""; for (const b of new Uint8Array(bytes)) s += String.fromCharCode(b); return btoa(s); };
   const esc = (s) => String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
   const uid = () => (crypto.randomUUID ? crypto.randomUUID() : Date.now().toString(36) + Math.random().toString(36).slice(2, 10));
+  const sameTags = (a, b) => JSON.stringify((a || []).slice().sort()) === JSON.stringify((b || []).slice().sort());
 
   function norm(s) {
     return String(s ?? "").replace(/&/g, " and ").normalize("NFD").replace(/[̀-ͯ]/g, "")
@@ -314,7 +342,7 @@
       tags = data.tags || [];
       cfg = data.req || null;
       updatedAt = data.updated ? new Date(data.updated) : null;
-      pending = loadPending();
+      ops = loadOps();
       $("lockError").textContent = "";
       show("app");
       buildTagChips();
@@ -330,8 +358,8 @@
     }
   }
 
+  // t=title y=year s=status k=kind(0/1) i=imdb m=tmdb p=poster a=added d=disk n=notes g=wishlists
   function prep(it) {
-    // t=title y=year s=status(wanted|todo|ripped|removed) k=kind(0 movie,1 tv) i=imdb p=poster a=added d=disk n=notes g=wishlists
     it.g = it.g || [];
     it.hay = " " + norm(it.t) + " " + (it.y || "") + " " + (it.i || "").toLowerCase() + " " + norm(it.g.join(" ")) + " ";
     it.sortT = norm(it.t).replace(/^(the|a|an) /, "");
@@ -340,25 +368,51 @@
 
   const statusWord = { wanted: "Wanted", todo: "To rip", ripped: "✓ Ripped", removed: "Removed" };
 
-  // ---------- pending (added here, not on the PC yet) ----------
-  function loadPending() {
-    try {
-      const raw = JSON.parse(store.get(PENDING_KEY) || "[]");
-      return Array.isArray(raw) ? raw : [];
-    } catch { return []; }
+  // ---------- changes waiting to reach the PC ----------
+  function loadOps() {
+    let raw = [];
+    try { raw = JSON.parse(store.get(PENDING_KEY) || "[]"); } catch { raw = []; }
+    if (!Array.isArray(raw)) raw = [];
+    // Anything saved by the first version was an "add".
+    return raw.map(o => o.action ? o : {
+      opId: o.id || uid(), action: "add", sent: !!o.sent, created: o.created || new Date().toISOString(),
+      title: o.title, year: o.year, kind: o.kind || "Movie", tmdbId: o.tmdbId, imdbId: o.imdbId || "",
+      poster: o.poster || "", tags: o.tags || []
+    });
   }
-  function savePending() { store.set(PENDING_KEY, JSON.stringify(pending)); }
+  function saveOps() { store.set(PENDING_KEY, JSON.stringify(ops)); }
 
-  function pendingAsItems() {
-    // Drop any that already came back in the published list.
-    pending = pending.filter(p => !items.some(it =>
-      (p.tmdbId && it.tmdbId === p.tmdbId) || (norm(it.t) === norm(p.title) && (it.y || 0) === (p.year || 0))));
-    savePending();
-    return pending.map(p => prep({
-      t: p.title, y: p.year, s: "wanted", k: p.kind === "TvShow" ? 1 : 0, i: p.imdbId || "",
-      p: p.poster || "", a: (p.created || "").slice(0, 10), d: "", n: p.sent ? "" : "waiting for signal",
-      g: p.tags || [], tmdbId: p.tmdbId, local: true
+  function opMatches(op, it) {
+    if (op.tmdbId && it.m) return op.tmdbId === it.m;
+    if (op.imdbId && it.i) return op.imdbId.toLowerCase() === it.i.toLowerCase();
+    return norm(op.title) === norm(it.t) && (op.year || 0) === (it.y || 0);
+  }
+
+  // Drops changes the PC has already applied, then paints the rest on top of the published list.
+  function allItems() {
+    ops = ops.filter(op => {
+      const hit = items.find(it => opMatches(op, it));
+      if (op.action === "add") return !hit;
+      if (op.action === "delete") return !!hit;
+      return hit ? !sameTags(hit.g, op.tags) : false;
+    });
+    saveOps();
+
+    const deletes = ops.filter(o => o.action === "delete");
+    const retags = ops.filter(o => o.action === "tags");
+    const list = items
+      .filter(it => !deletes.some(op => opMatches(op, it)))
+      .map(it => {
+        const retag = retags.find(op => opMatches(op, it));
+        return retag ? prep({ ...it, g: retag.tags.slice(), pendingEdit: true }) : it;
+      });
+
+    const adds = ops.filter(o => o.action === "add").map(op => prep({
+      t: op.title, y: op.year, s: "wanted", k: op.kind === "TvShow" ? 1 : 0, i: op.imdbId || "",
+      m: op.tmdbId, p: op.poster || "", a: (op.created || "").slice(0, 10), d: "",
+      n: op.sent ? "" : "waiting for signal", g: op.tags || [], local: true, opId: op.opId
     }));
+    return adds.concat(list);
   }
 
   function canAdd() { return !!(cfg && cfg.on && cfg.o && cfg.r && cfg.t); }
@@ -382,8 +436,6 @@
     }));
   }
 
-  function allItems() { return pendingAsItems().concat(items); }
-
   function render() {
     const qText = $("q").value.trim();
     const tokens = norm(qText).split(" ").filter(Boolean);
@@ -400,7 +452,7 @@
       let cls, mark, text;
       if (hits.length === 0) {
         cls = "no"; mark = "✗"; text = `“${qText}” is not on your list.`;
-        if (canAdd()) { $("answerAdd").hidden = false; }
+        if (canAdd()) $("answerAdd").hidden = false;
       } else if (hits.length === 1) {
         const h = hits[0], name = h.t + (h.y ? ` (${h.y})` : "");
         if (h.s === "ripped") { cls = "ok"; mark = "✓"; text = `Yes, you've ripped ${name}.`; }
@@ -431,9 +483,11 @@
     else if (sortBy === "added") list.sort((a, b) => String(b.a || "").localeCompare(String(a.a || "")) || a.sortT.localeCompare(b.sortT));
     else list.sort((a, b) => a.sortT.localeCompare(b.sortT) || (a.y || 0) - (b.y || 0));
 
-    const slice = list.slice(0, shown);
-    $("list").innerHTML = slice.map(rowHtml).join("");
-    $("list").hidden = slice.length === 0;
+    view = list.slice(0, shown);
+    $("list").innerHTML = view.map((it, i) => rowHtml(it, i)).join("");
+    $("list").hidden = view.length === 0;
+    $("list").querySelectorAll("li[data-row]").forEach(li =>
+      li.addEventListener("click", () => openEdit(view[+li.dataset.row])));
     $("moreBtn").hidden = list.length <= shown;
     $("count").textContent = list.length === everything.length ? `${everything.length} titles` : `Showing ${list.length} of ${everything.length}`;
 
@@ -447,7 +501,7 @@
     $("updated").textContent = updatedAt ? "List from " + updatedAt.toLocaleString([], { dateStyle: "medium", timeStyle: "short" }) : "";
   }
 
-  function rowHtml(it) {
+  function rowHtml(it, index) {
     const poster = it.p
       ? `<img class="poster" loading="lazy" alt="" src="https://image.tmdb.org/t/p/w92${esc(it.p)}" onerror="this.removeAttribute('src')">`
       : `<span class="poster"></span>`;
@@ -456,16 +510,15 @@
     bits.push(esc(it.k === 1 ? "TV" : "Movie"));
     if (it.d) bits.push(esc(it.d));
     if (it.n) bits.push(esc(it.n));
-    const inner = `${poster}<div class="info"><div class="title">${esc(it.t)}${it.y ? ` <span class="year">(${it.y})</span>` : ""}</div>` +
-                  `<div class="meta">${bits.join(" · ")}</div></div>` +
-                  `<span class="pill ${esc(it.s)}">${esc(statusWord[it.s] || "")}</span>`;
-    const cls = it.s === "removed" ? ' class="is-removed"' : "";
-    return it.i
-      ? `<li${cls}><a href="https://www.imdb.com/title/${esc(it.i)}/" target="_blank" rel="noopener">${inner}</a></li>`
-      : `<li${cls}>${inner}</li>`;
+    if (it.pendingEdit) bits.push("change waiting");
+    const cls = (it.s === "removed" ? "is-removed " : "") + "tappable";
+    return `<li class="${cls}" data-row="${index}">${poster}<div class="info">` +
+           `<div class="title">${esc(it.t)}${it.y ? ` <span class="year">(${it.y})</span>` : ""}</div>` +
+           `<div class="meta">${bits.join(" · ")}</div></div>` +
+           `<span class="pill ${esc(it.s)}">${esc(statusWord[it.s] || "")}</span></li>`;
   }
 
-  // ---------- adding a request ----------
+  // ---------- add ----------
   let addKind = 0, addPicked = null, addTagsChosen = [], addResults = [], addTimer = null;
 
   function openSheet(prefill) {
@@ -494,17 +547,23 @@
     }));
   }
 
+  function tmdbUrl(path, extra) {
+    const bearer = cfg.tmdb.length > 40;
+    return {
+      url: `https://api.themoviedb.org/3/${path}?language=en-US${extra || ""}` + (bearer ? "" : `&api_key=${encodeURIComponent(cfg.tmdb)}`),
+      init: bearer ? { headers: { Authorization: "Bearer " + cfg.tmdb } } : undefined
+    };
+  }
+
   async function searchTmdb() {
     const q = $("addQ").value.trim();
     if (q.length < 2) { $("addResults").innerHTML = ""; return; }
     if (!cfg.tmdb) { $("addHint").textContent = "No movie lookup key is set on the PC, so titles can't be searched here."; return; }
     $("addHint").textContent = "Searching…";
     try {
-      const path = addKind === 1 ? "search/tv" : "search/movie";
-      const bearer = cfg.tmdb.length > 40;
-      const url = `https://api.themoviedb.org/3/${path}?include_adult=false&language=en-US&page=1&query=${encodeURIComponent(q)}`
-        + (bearer ? "" : `&api_key=${encodeURIComponent(cfg.tmdb)}`);
-      const res = await fetch(url, bearer ? { headers: { Authorization: "Bearer " + cfg.tmdb } } : undefined);
+      const { url, init } = tmdbUrl(addKind === 1 ? "search/tv" : "search/movie",
+        `&include_adult=false&page=1&query=${encodeURIComponent(q)}`);
+      const res = await fetch(url, init);
       if (!res.ok) throw new Error("HTTP " + res.status);
       const data = await res.json();
       addResults = (data.results || []).slice(0, 12).map(r => ({
@@ -515,7 +574,7 @@
       }));
       $("addHint").textContent = addResults.length ? "Tap the right one." : "No matches. Try a different spelling.";
       $("addResults").innerHTML = addResults.map((r, i) => {
-        const owned = allItems().find(it => it.tmdbId === r.tmdbId || (norm(it.t) === norm(r.title) && (it.y || 0) === (r.year || 0)));
+        const owned = allItems().find(it => (it.m && it.m === r.tmdbId) || (norm(it.t) === norm(r.title) && (it.y || 0) === (r.year || 0)));
         const note = owned ? `<div class="meta">Already on the list · ${esc(statusWord[owned.s] || "")}</div>` : "";
         const poster = r.poster
           ? `<img class="poster" loading="lazy" alt="" src="https://image.tmdb.org/t/p/w92${esc(r.poster)}" onerror="this.removeAttribute('src')">`
@@ -538,10 +597,8 @@
   async function fetchImdbId(tmdbId, kind) {
     if (!cfg.tmdb) return "";
     try {
-      const bearer = cfg.tmdb.length > 40;
-      const path = kind === 1 ? `tv/${tmdbId}/external_ids` : `movie/${tmdbId}`;
-      const url = `https://api.themoviedb.org/3/${path}?language=en-US` + (bearer ? "" : `&api_key=${encodeURIComponent(cfg.tmdb)}`);
-      const res = await fetch(url, bearer ? { headers: { Authorization: "Bearer " + cfg.tmdb } } : undefined);
+      const { url, init } = tmdbUrl(kind === 1 ? `tv/${tmdbId}/external_ids` : `movie/${tmdbId}`);
+      const res = await fetch(url, init);
       if (!res.ok) return "";
       const data = await res.json();
       return data.imdb_id || "";
@@ -553,34 +610,107 @@
     $("addSubmit").disabled = true;
     $("addSubmit").textContent = "Adding…";
     const imdbId = await fetchImdbId(addPicked.tmdbId, addKind);
-    const request = {
-      id: uid(),
-      title: addPicked.title,
-      year: addPicked.year,
-      kind: addKind === 1 ? "TvShow" : "Movie",
-      tmdbId: addPicked.tmdbId,
-      imdbId: imdbId,
-      poster: addPicked.poster,
-      tags: addTagsChosen.slice(),
-      created: new Date().toISOString(),
-      sent: false
-    };
-    pending.push(request);
-    savePending();
+    ops.push({
+      opId: uid(), action: "add", sent: false, created: new Date().toISOString(),
+      title: addPicked.title, year: addPicked.year, kind: addKind === 1 ? "TvShow" : "Movie",
+      tmdbId: addPicked.tmdbId, imdbId: imdbId, poster: addPicked.poster, tags: addTagsChosen.slice()
+    });
+    saveOps();
     $("addSubmit").textContent = "Add to list";
     closeSheet();
     render();
-    toast(`Added ${request.title}. It'll appear on the PC next time it checks.`);
+    toast(`Added ${addPicked.title}. It'll appear on the PC next time it checks.`);
     sendPending();
   }
 
-  async function sendOne(request) {
+  // ---------- edit / remove ----------
+  let editItem = null, editTagsChosen = [];
+
+  function openEdit(it) {
+    if (!it) return;
+    editItem = it;
+    editTagsChosen = (it.g || []).slice();
+    $("editTitle").textContent = it.t + (it.y ? ` (${it.y})` : "");
+    $("editStatus").textContent = (statusWord[it.s] || "") + (it.d ? " · " + it.d : "");
+    $("editImdb").hidden = !it.i;
+    $("editDelete").hidden = !(it.s === "wanted" && canAdd());
+    $("editTagsWrap").hidden = !canAdd();
+    $("editSave").hidden = !canAdd();
+    $("editHint").textContent = canAdd() ? "" : "Changes can only be made from the PC.";
+    renderEditTags();
+    $("editSheet").hidden = false;
+  }
+  function closeEdit() { $("editSheet").hidden = true; editItem = null; }
+
+  function renderEditTags() {
+    const box = $("editTags");
+    if (!tags.length) { box.innerHTML = `<span class="hint">No wishlists set up on the PC yet.</span>`; return; }
+    box.innerHTML = tags.map(t =>
+      `<button class="chip tag" type="button" data-edittag="${esc(t)}" aria-pressed="${editTagsChosen.includes(t)}">${esc(t)}</button>`).join("");
+    box.querySelectorAll("[data-edittag]").forEach(b => b.addEventListener("click", () => {
+      const t = b.dataset.edittag;
+      editTagsChosen = editTagsChosen.includes(t) ? editTagsChosen.filter(x => x !== t) : editTagsChosen.concat(t);
+      b.setAttribute("aria-pressed", editTagsChosen.includes(t));
+    }));
+  }
+
+  function targetOf(it) {
+    return {
+      title: it.t, year: it.y, kind: it.k === 1 ? "TvShow" : "Movie",
+      tmdbId: it.m, imdbId: it.i || "", poster: it.p || ""
+    };
+  }
+
+  function saveEdit() {
+    if (!editItem) return;
+    if (sameTags(editItem.g, editTagsChosen)) { closeEdit(); return; }
+
+    if (editItem.local) {
+      // Still queued here: just change the queued request.
+      const op = ops.find(o => o.opId === editItem.opId);
+      if (op) {
+        op.tags = editTagsChosen.slice();
+        if (op.sent) ops.push({ opId: uid(), action: "tags", sent: false, created: new Date().toISOString(), ...targetOf(editItem), tags: editTagsChosen.slice() });
+      }
+    } else {
+      ops = ops.filter(o => !(o.action === "tags" && opMatches(o, editItem)));
+      ops.push({ opId: uid(), action: "tags", sent: false, created: new Date().toISOString(), ...targetOf(editItem), tags: editTagsChosen.slice() });
+    }
+    saveOps();
+    closeEdit();
+    render();
+    toast("Wishlists updated.");
+    sendPending();
+  }
+
+  function deleteEdit() {
+    if (!editItem) return;
+    if (!confirm(`Remove ${editItem.t} from the list?`)) return;
+
+    if (editItem.local) {
+      const op = ops.find(o => o.opId === editItem.opId);
+      ops = ops.filter(o => o.opId !== editItem.opId);
+      if (op && op.sent) {
+        ops.push({ opId: uid(), action: "delete", sent: false, created: new Date().toISOString(), ...targetOf(editItem) });
+      }
+    } else {
+      ops = ops.filter(o => !opMatches(o, editItem));
+      ops.push({ opId: uid(), action: "delete", sent: false, created: new Date().toISOString(), ...targetOf(editItem) });
+    }
+    saveOps();
+    closeEdit();
+    render();
+    toast("Removed. The PC will catch up shortly.");
+    sendPending();
+  }
+
+  // ---------- sending ----------
+  async function sendOne(op) {
     const body = await encrypt({
-      id: request.id, title: request.title, year: request.year, kind: request.kind,
-      tmdbId: request.tmdbId, imdbId: request.imdbId, poster: request.poster,
-      tags: request.tags, created: request.created
+      id: op.opId, action: op.action, title: op.title, year: op.year, kind: op.kind,
+      tmdbId: op.tmdbId, imdbId: op.imdbId, poster: op.poster, tags: op.tags || [], created: op.created
     }, passphrase);
-    const url = `https://api.github.com/repos/${encodeURIComponent(cfg.o)}/${encodeURIComponent(cfg.r)}/contents/requests/${request.id}.json`;
+    const url = `https://api.github.com/repos/${encodeURIComponent(cfg.o)}/${encodeURIComponent(cfg.r)}/contents/requests/${op.opId}.json`;
     const res = await fetch(url, {
       method: "PUT",
       headers: {
@@ -589,25 +719,25 @@
         "X-GitHub-Api-Version": "2022-11-28",
         "Content-Type": "application/json"
       },
-      body: JSON.stringify({ message: "Wishlist request", content: toB64(new TextEncoder().encode(JSON.stringify(body))) })
+      body: JSON.stringify({ message: "Wishlist " + op.action, content: toB64(new TextEncoder().encode(JSON.stringify(body))) })
     });
-    if (!res.ok && res.status !== 422) throw new Error("HTTP " + res.status);   // 422 = already there
+    if (!res.ok && res.status !== 422) throw new Error("HTTP " + res.status);
   }
 
   async function sendPending() {
     if (!canAdd() || !passphrase) return;
     let changed = false;
-    for (const request of pending) {
-      if (request.sent) continue;
+    for (const op of ops) {
+      if (op.sent) continue;
       try {
-        await sendOne(request);
-        request.sent = true;
+        await sendOne(op);
+        op.sent = true;
         changed = true;
       } catch {
         break;   // no signal or GitHub refused; try again later
       }
     }
-    if (changed) { savePending(); render(); }
+    if (changed) { saveOps(); render(); }
   }
 
   // ---------- events ----------
@@ -646,6 +776,14 @@
   $("addQ").addEventListener("input", () => { clearTimeout(addTimer); addTimer = setTimeout(searchTmdb, 450); });
   $("addQ").addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); clearTimeout(addTimer); searchTmdb(); } });
   $("addSubmit").addEventListener("click", submitRequest);
+
+  $("editClose").addEventListener("click", closeEdit);
+  $("editSheet").addEventListener("click", (e) => { if (e.target === $("editSheet")) closeEdit(); });
+  $("editSave").addEventListener("click", saveEdit);
+  $("editDelete").addEventListener("click", deleteEdit);
+  $("editImdb").addEventListener("click", () => {
+    if (editItem && editItem.i) window.open(`https://www.imdb.com/title/${editItem.i}/`, "_blank", "noopener");
+  });
 
   $("refreshBtn").addEventListener("click", async () => {
     $("refreshBtn").textContent = "…";
