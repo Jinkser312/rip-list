@@ -535,15 +535,31 @@
     }
   }
 
+  async function fetchImdbId(tmdbId, kind) {
+    if (!cfg.tmdb) return "";
+    try {
+      const bearer = cfg.tmdb.length > 40;
+      const path = kind === 1 ? `tv/${tmdbId}/external_ids` : `movie/${tmdbId}`;
+      const url = `https://api.themoviedb.org/3/${path}?language=en-US` + (bearer ? "" : `&api_key=${encodeURIComponent(cfg.tmdb)}`);
+      const res = await fetch(url, bearer ? { headers: { Authorization: "Bearer " + cfg.tmdb } } : undefined);
+      if (!res.ok) return "";
+      const data = await res.json();
+      return data.imdb_id || "";
+    } catch { return ""; }
+  }
+
   async function submitRequest() {
     if (!addPicked) return;
+    $("addSubmit").disabled = true;
+    $("addSubmit").textContent = "Adding…";
+    const imdbId = await fetchImdbId(addPicked.tmdbId, addKind);
     const request = {
       id: uid(),
       title: addPicked.title,
       year: addPicked.year,
       kind: addKind === 1 ? "TvShow" : "Movie",
       tmdbId: addPicked.tmdbId,
-      imdbId: "",
+      imdbId: imdbId,
       poster: addPicked.poster,
       tags: addTagsChosen.slice(),
       created: new Date().toISOString(),
@@ -551,6 +567,7 @@
     };
     pending.push(request);
     savePending();
+    $("addSubmit").textContent = "Add to list";
     closeSheet();
     render();
     toast(`Added ${request.title}. It'll appear on the PC next time it checks.`);
