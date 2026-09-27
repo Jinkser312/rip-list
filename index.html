@@ -114,11 +114,17 @@
     width: 58px; height: 58px; border-radius: 50%; border: 0; background: var(--accent); color: #fff; font-size: 30px;
     line-height: 1; box-shadow: var(--shadow); cursor: pointer; z-index: 20; }
   .sheet { position: fixed; inset: 0; z-index: 30; background: rgba(15,23,42,.45); display: flex; align-items: flex-end; }
-  .sheet-inner { background: var(--bg); width: 100%; max-height: 92vh; border-radius: 18px 18px 0 0; padding: 16px 16px calc(16px + env(safe-area-inset-bottom));
-    display: flex; flex-direction: column; gap: 10px; overflow: auto; }
+  /* dvh keeps the panel inside what's actually on screen, toolbars and all */
+  .sheet-inner { background: var(--bg); width: 100%; max-height: 92vh; max-height: 92dvh;
+    border-radius: 18px 18px 0 0; padding: 16px 16px calc(16px + env(safe-area-inset-bottom));
+    display: flex; flex-direction: column; gap: 10px; overflow: hidden; }
   @media (min-width: 700px) { .sheet { align-items: center; } .sheet-inner { max-width: 640px; margin: 0 auto; border-radius: 18px; } }
   .sheet h2 { margin: 0; font-size: 20px; }
-  .sheet .rows { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; overflow: hidden; }
+  .sheet .top, .sheet .chips, .sheet .field, .sheet .hint, .sheet-actions, .sheet .btn { flex: 0 0 auto; }
+  /* the results are the part that scrolls */
+  .sheet .rows { background: var(--surface); border: 1px solid var(--border); border-radius: 12px;
+    flex: 1 1 auto; min-height: 96px; overflow-y: auto; -webkit-overflow-scrolling: touch; overscroll-behavior: contain; }
+  body.sheet-open { overflow: hidden; }
   .sheet .rows li { cursor: pointer; }
   .sheet .rows li[aria-selected="true"] { background: var(--info-banner); }
   .sheet-actions { display: flex; gap: 8px; }
@@ -557,11 +563,12 @@
     $("addHint").textContent = "Search, tap the right one, then pick who wants it.";
     $("addQ").value = prefill || "";
     $("sheet").hidden = false;
+    document.body.classList.add("sheet-open");
     renderAddTags();
     setTimeout(() => $("addQ").focus(), 60);
     if (prefill) searchTmdb();
   }
-  function closeSheet() { $("sheet").hidden = true; }
+  function closeSheet() { $("sheet").hidden = true; document.body.classList.remove("sheet-open"); }
 
   function renderAddTags() {
     const box = $("addTags");
@@ -737,8 +744,13 @@
     $("editHint").textContent = canAdd() ? "" : "Changes can only be made from the PC.";
     renderEditTags();
     $("editSheet").hidden = false;
+    document.body.classList.add("sheet-open");
   }
-  function closeEdit() { $("editSheet").hidden = true; editItem = null; }
+  function closeEdit() {
+    $("editSheet").hidden = true;
+    document.body.classList.remove("sheet-open");
+    editItem = null;
+  }
 
   function renderEditTags() {
     const box = $("editTags");
